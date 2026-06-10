@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+if BACKEND_URL and not BACKEND_URL.startswith(("http://", "https://")):
+    BACKEND_URL = f"http://{BACKEND_URL}"
+
 
 st.set_page_config(page_title="Codebase Q&A v2", page_icon="🔍", layout="wide")
 

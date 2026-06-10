@@ -19,7 +19,11 @@ services:
     dockerfilePath: frontend/Dockerfile
     envVars:
       - key: BACKEND_URL
-        value: http://codebase-qa-backend:8000
+        fromService:
+          type: web
+          name: codebase-qa-backend
+          property: hostport
+
 
 databases:
   - name: ragdb
