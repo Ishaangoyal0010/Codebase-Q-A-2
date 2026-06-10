@@ -60,7 +60,10 @@ embeddings = HuggingFaceAPIEmbeddings(os.getenv("HF_TOKEN"))
 # ── db connection ─────────────────────────────────────────────────
 def get_engine():
     url = os.getenv("DATABASE_URL", "postgresql://raguser:ragpass@db:5432/ragdb")
+    if url and url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
     return create_engine(url)
+
 
 def setup_db():
     engine = get_engine()
