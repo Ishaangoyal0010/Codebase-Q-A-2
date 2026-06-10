@@ -8,6 +8,29 @@ from pathlib import Path
 
 import time
 import requests
+import socket
+import urllib3.util.connection as connection
+
+# ── DNS caching patch to prevent Render DNS throttling ────────────────
+_orig_create_connection = connection.create_connection
+dns_cache = {}
+
+def patched_create_connection(address, *args, **kwargs):
+    host, port = address
+    if host == "api-inference.huggingface.co":
+        if host not in dns_cache:
+            for _ in range(5):
+                try:
+                    dns_cache[host] = socket.gethostbyname(host)
+                    break
+                except Exception:
+                    time.sleep(2)
+        if host in dns_cache:
+            return _orig_create_connection((dns_cache[host], port), *args, **kwargs)
+    return _orig_create_connection(address, *args, **kwargs)
+
+connection.create_connection = patched_create_connection
+
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from sqlalchemy import create_engine, text
