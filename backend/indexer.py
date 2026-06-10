@@ -6,13 +6,56 @@ import hashlib
 import subprocess
 from pathlib import Path
 
+import time
+import requests
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
 from sqlalchemy import create_engine, text
 
-# ── embedding model ───────────────────────────────────────────────
-embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+# ── embedding model (API-based to prevent Out of Memory on Render Free tier) ──
+API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+
+class HuggingFaceAPIEmbeddings:
+    def __init__(self, token=None):
+        self.token = token
+        self.headers = {"Authorization": f"Bearer {token}"} if token else {}
+
+    def _get_embeddings(self, texts):
+        retries = 5
+        delay = 5
+        for i in range(retries):
+            try:
+                res = requests.post(API_URL, headers=self.headers, json={"inputs": texts}, timeout=30)
+                data = res.json()
+                if isinstance(data, dict) and "error" in data:
+                    if "loading" in data["error"].lower():
+                        # Model loading on HF servers, wait and retry
+                        time.sleep(delay)
+                        continue
+                    raise Exception(data["error"])
+                return data
+            except Exception as e:
+                if i == retries - 1:
+                    raise e
+                time.sleep(delay)
+        raise Exception("Failed to get embeddings from HuggingFace API after retries.")
+
+    def embed_documents(self, texts):
+        # Batch to avoid HTTP timeout/payload limits
+        batch_size = 32
+        all_embeddings = []
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i+batch_size]
+            embeddings = self._get_embeddings(batch)
+            all_embeddings.extend(embeddings)
+        return all_embeddings
+
+    def embed_query(self, text):
+        res = self._get_embeddings([text])
+        return res[0]
+
+embeddings = HuggingFaceAPIEmbeddings(os.getenv("HF_TOKEN"))
+
 
 # ── db connection ─────────────────────────────────────────────────
 def get_engine():

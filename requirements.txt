@@ -7,8 +7,6 @@ httpx==0.27.0
 # langchain + embeddings
 langchain==0.2.6
 langchain-community==0.2.6
-langchain-huggingface==0.0.3
-sentence-transformers==3.0.1
 
 # postgresql + pgvector
 psycopg2-binary==2.9.9
