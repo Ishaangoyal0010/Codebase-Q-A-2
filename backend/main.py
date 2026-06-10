@@ -84,15 +84,23 @@ def test_dns():
 
     try:
         # Test feature extraction on the new router endpoint
-        res = requests.post("https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2", json={"inputs": ["test"]}, timeout=5)
+        import os
+        token = os.getenv("HF_TOKEN")
+        headers = {"Authorization": f"Bearer {token}"} if token else {}
+        res = requests.post("https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction", json={"inputs": ["test"]}, headers=headers, timeout=5)
         results["router"]["http_status"] = res.status_code
         if res.status_code == 200:
             results["router"]["http_response_type"] = str(type(res.json()))
+            try:
+                results["router"]["embedding_len"] = len(res.json()[0])
+            except:
+                pass
     except Exception as e:
         results["router"]["http_error"] = f"Error: {e}"
         
-    results["version"] = "v5-router-dgn"
+    results["version"] = "v6-router-pip"
     return results
+
 
 
 

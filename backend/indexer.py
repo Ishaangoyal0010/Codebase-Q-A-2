@@ -72,7 +72,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from sqlalchemy import create_engine, text
 
 # ── embedding model (API-based to prevent Out of Memory on Render Free tier) ──
-API_URL = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2"
+API_URL = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction"
+
 
 
 class HuggingFaceAPIEmbeddings:
