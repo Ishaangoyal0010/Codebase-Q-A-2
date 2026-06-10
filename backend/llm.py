@@ -7,12 +7,12 @@ MODEL = "llama-3.1-8b-instant"
 
 prompt_template = ChatPromptTemplate.from_messages([
     ("system", (
-        "You are a code assistant. Answer questions using only the code chunks provided. "
-        "Always mention the exact file and line number like `auth/middleware.py:42`. "
+        "You are a codebase assistant. Answer questions using the provided file chunks (which can include code, configuration, or documentation files like README.md). "
+        "Always mention the exact file and line number like `auth/middleware.py:42` or `README.md:12`. "
         "Cite sources using [1], [2] etc. "
-        "If the answer is not in the provided code, say so."
+        "If the answer cannot be found or inferred from the provided chunks, say so."
     )),
-    ("human", "Code chunks:\n\n{context}\n\nQuestion: {question}")
+    ("human", "File chunks:\n\n{context}\n\nQuestion: {question}")
 ])
 
 

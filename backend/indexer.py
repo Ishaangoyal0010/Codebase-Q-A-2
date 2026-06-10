@@ -156,7 +156,11 @@ def clear_source(source, engine):
         conn.commit()
 
 # ── file walking ──────────────────────────────────────────────────
-ALLOWED = {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".cpp", ".c", ".rb", ".rs", ".cs"}
+ALLOWED = {
+    ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".cpp", ".c", 
+    ".rb", ".rs", ".cs", ".php", ".html", ".css", ".md", ".json", 
+    ".txt", ".yaml", ".yml", ".toml", ".sh", ".ini"
+}
 SKIP    = {"node_modules", ".git", "__pycache__", "venv", ".venv", "dist", "build", ".next"}
 
 def get_all_files(folder):
