@@ -279,7 +279,37 @@ with flow_tab:
 
         if st.session_state.get("flow_diagram"):
             st.subheader("📊 Architecture Diagram")
-            st.markdown(st.session_state.flow_diagram)
+            
+            # Clean and wrap in mermaid block
+            raw_diag = st.session_state.flow_diagram.strip()
+            # Strip any existing ```mermaid and ```
+            lines = raw_diag.split("\n")
+            cleaned_lines = []
+            for line in lines:
+                s_line = line.strip()
+                if s_line.startswith("```"):
+                    continue
+                cleaned_lines.append(line)
+            diag_body = "\n".join(cleaned_lines).strip()
+            
+            # Inject beautiful dark theme configuration matching Streamlit's style
+            theme_config = (
+                "%%{init: {\n"
+                "  'theme': 'base',\n"
+                "  'themeVariables': {\n"
+                "    'primaryColor': '#2d3139',\n"
+                "    'primaryTextColor': '#adbac7',\n"
+                "    'primaryBorderColor': '#444c56',\n"
+                "    'lineColor': '#ff4b4b',\n"
+                "    'secondaryColor': '#22272e',\n"
+                "    'tertiaryColor': '#2d3139'\n"
+                "  }\n"
+                "}}%%\n"
+            )
+            
+            # Reconstruct the mermaid markdown block
+            mermaid_markdown = f"```mermaid\n{theme_config}{diag_body}\n```"
+            st.markdown(mermaid_markdown)
             st.divider()
 
         col1, col2 = st.columns([1, 1])

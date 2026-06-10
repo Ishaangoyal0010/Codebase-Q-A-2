@@ -19,23 +19,42 @@ Reference specific files like `filename.py:function_name`.
 Do not make things up — only use what you see in the code."""
 
 DIAGRAM_PROMPT = """You are a software architect. Based on the code chunks provided,
-generate a Mermaid flowchart diagram showing how data flows through this project.
+generate a beautiful Mermaid flowchart diagram showing how data flows through this project.
 
 Rules:
-- Use flowchart TD (top-down)
-- Keep it simple, max 10-12 nodes
-- Show the main flow from user input to output
-- Use short node labels
-- Only output the mermaid code block, nothing else
+- Use flowchart TD (top-down).
+- Group components logically using `subgraph` blocks (e.g., Client/Frontend, Server/Backend, Storage, External APIs).
+- Use distinct Mermaid node shapes to represent different elements:
+  - Use double-circle `node((Label))` or circle `node((Label))` for entry and exit points.
+  - Use round-edge `node(Label)` for scripts or UI files.
+  - Use cylindrical database shape `node[(Label)]` for vector stores or SQL databases.
+  - Use hexagon shape `node{{Label}}` for third-party services / APIs.
+- Keep node labels short and professional.
+- Do not make things up — base the flow strictly on the codebase.
+- Only output the mermaid code block wrapped in ```mermaid ... ```, nothing else.
 
 Example format:
 ```mermaid
 flowchart TD
-    A[User Input] --> B[FastAPI]
-    B --> C[Indexer]
-    C --> D[FAISS]
-    D --> E[LLM]
-    E --> F[Answer]
+    subgraph Client ["Client (Streamlit)"]
+        UI((User Input)) --> APP(app.py)
+    end
+    
+    subgraph Server ["Server (FastAPI)"]
+        APP -->|HTTP Post| API(main.py)
+        API --> RET(retriever.py)
+        API --> IDX(indexer.py)
+    end
+
+    subgraph Storage ["Data Storage"]
+        IDX --> DB[(PostgreSQL / pgvector)]
+        DB --> RET
+    end
+
+    subgraph External ["External APIs"]
+        RET --> HF{{Hugging Face Embeddings}}
+        API --> GROQ{{Groq LLM}}
+    end
 ```"""
 
 
