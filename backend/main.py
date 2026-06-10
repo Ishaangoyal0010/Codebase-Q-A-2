@@ -44,6 +44,58 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/test-dns")
+def test_dns():
+    import socket
+    import requests
+    results = {}
+    
+    # 1. Test local DNS resolution
+    try:
+        results["local_dns"] = socket.gethostbyname("api-inference.huggingface.co")
+    except Exception as e:
+        results["local_dns"] = f"Error: {e}"
+        
+    # 2. Test Cloudflare DoH
+    try:
+        res = requests.get(
+            "https://1.1.1.1/dns-query",
+            params={"name": "api-inference.huggingface.co", "type": "A"},
+            headers={"accept": "application/dns-json"},
+            timeout=5
+        )
+        results["cloudflare_doh"] = res.json()
+    except Exception as e:
+        results["cloudflare_doh"] = f"Error: {e}"
+
+    # 3. Test Google DoH
+    try:
+        res = requests.get(
+            "https://8.8.8.8/resolve",
+            params={"name": "api-inference.huggingface.co", "type": "A"},
+            timeout=5
+        )
+        results["google_doh"] = res.json()
+    except Exception as e:
+        results["google_doh"] = f"Error: {e}"
+        
+    # 4. Test actual HTTP connection
+    try:
+        res = requests.post(
+            "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2",
+            json={"inputs": ["test"]},
+            timeout=5
+        )
+        results["hf_http_status"] = res.status_code
+        results["hf_http_response_type"] = str(type(res.json()))
+    except Exception as e:
+        results["hf_http_error"] = f"Error: {e}"
+        
+    results["version"] = "v4-doh-dgn"
+    return results
+
+
+
 @app.get("/sources")
 def sources():
     try:
