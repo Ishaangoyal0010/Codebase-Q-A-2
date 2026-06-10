@@ -20,7 +20,7 @@ def resolve_via_doh():
     try:
         res = requests.get(
             "https://1.1.1.1/dns-query",
-            params={"name": "api-inference.huggingface.co", "type": "A"},
+            params={"name": "router.huggingface.co", "type": "A"},
             headers={"accept": "application/dns-json"},
             timeout=5
         )
@@ -34,7 +34,7 @@ def resolve_via_doh():
     try:
         res = requests.get(
             "https://8.8.8.8/resolve",
-            params={"name": "api-inference.huggingface.co", "type": "A"},
+            params={"name": "router.huggingface.co", "type": "A"},
             timeout=5
         )
         data = res.json()
@@ -47,7 +47,7 @@ def resolve_via_doh():
 
 def patched_create_connection(address, *args, **kwargs):
     host, port = address
-    if host == "api-inference.huggingface.co":
+    if host == "router.huggingface.co":
         if host not in dns_cache:
             for _ in range(3):
                 try:
@@ -72,7 +72,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from sqlalchemy import create_engine, text
 
 # ── embedding model (API-based to prevent Out of Memory on Render Free tier) ──
-API_URL = "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2"
+API_URL = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2"
+
 
 class HuggingFaceAPIEmbeddings:
     def __init__(self, token=None):
