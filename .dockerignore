@@ -1,0 +1,11 @@
+.git
+__pycache__
+*.pyc
+.venv
+venv
+.env
+tmp_repo/
+*.swp
+.DS_Store
+.idea
+.vscode

@@ -1,0 +1,26 @@
+# backend
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+python-dotenv==1.0.1
+httpx==0.27.0
+
+# langchain + embeddings
+langchain==0.2.6
+langchain-community==0.2.6
+langchain-huggingface==0.0.3
+sentence-transformers==3.0.1
+
+# postgresql + pgvector
+psycopg2-binary==2.9.9
+pgvector==0.3.2
+sqlalchemy==2.0.31
+
+# groq
+groq==0.4.2
+
+# git cloning
+gitpython==3.1.43
+
+# frontend
+streamlit==1.35.0
+requests==2.32.3

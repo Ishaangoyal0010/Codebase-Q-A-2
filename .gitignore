@@ -1,0 +1,14 @@
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment variables (secrets)
+.env
+
+# Python cache files
+**/__pycache__/
+*.pyc
+
+# Local indexing temporary directories
+backend/tmp_repo/
