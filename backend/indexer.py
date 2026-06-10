@@ -15,21 +15,57 @@ import urllib3.util.connection as connection
 _orig_create_connection = connection.create_connection
 dns_cache = {}
 
+def resolve_via_doh():
+    # Try Cloudflare DoH (direct IP connection to bypass local DNS)
+    try:
+        res = requests.get(
+            "https://1.1.1.1/dns-query",
+            params={"name": "api-inference.huggingface.co", "type": "A"},
+            headers={"accept": "application/dns-json"},
+            timeout=5
+        )
+        data = res.json()
+        for answer in data.get("Answer", []):
+            if answer.get("type") == 1: # A record
+                return answer.get("data")
+    except Exception:
+        pass
+    # Try Google DoH (direct IP connection to bypass local DNS)
+    try:
+        res = requests.get(
+            "https://8.8.8.8/resolve",
+            params={"name": "api-inference.huggingface.co", "type": "A"},
+            timeout=5
+        )
+        data = res.json()
+        for answer in data.get("Answer", []):
+            if answer.get("type") == 1: # A record
+                return answer.get("data")
+    except Exception:
+        pass
+    return None
+
 def patched_create_connection(address, *args, **kwargs):
     host, port = address
     if host == "api-inference.huggingface.co":
         if host not in dns_cache:
-            for _ in range(5):
+            for _ in range(3):
                 try:
                     dns_cache[host] = socket.gethostbyname(host)
                     break
                 except Exception:
-                    time.sleep(2)
+                    # Fallback to DNS-over-HTTPS (DoH)
+                    doh_ip = resolve_via_doh()
+                    if doh_ip:
+                        dns_cache[host] = doh_ip
+                        break
+                    time.sleep(1)
         if host in dns_cache:
             return _orig_create_connection((dns_cache[host], port), *args, **kwargs)
     return _orig_create_connection(address, *args, **kwargs)
 
 connection.create_connection = patched_create_connection
+
 
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
