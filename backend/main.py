@@ -50,49 +50,50 @@ def test_dns():
     import requests
     results = {}
     
-    # 1. Test local DNS resolution
+    # 1. Test api-inference.huggingface.co
+    results["api_inference"] = {}
     try:
-        results["local_dns"] = socket.gethostbyname("api-inference.huggingface.co")
+        results["api_inference"]["local_dns"] = socket.gethostbyname("api-inference.huggingface.co")
     except Exception as e:
-        results["local_dns"] = f"Error: {e}"
+        results["api_inference"]["local_dns"] = f"Error: {e}"
         
-    # 2. Test Cloudflare DoH
     try:
-        res = requests.get(
-            "https://1.1.1.1/dns-query",
-            params={"name": "api-inference.huggingface.co", "type": "A"},
-            headers={"accept": "application/dns-json"},
-            timeout=5
-        )
-        results["cloudflare_doh"] = res.json()
+        res = requests.get("https://1.1.1.1/dns-query", params={"name": "api-inference.huggingface.co", "type": "A"}, headers={"accept": "application/dns-json"}, timeout=5)
+        results["api_inference"]["cf_doh"] = res.json()
     except Exception as e:
-        results["cloudflare_doh"] = f"Error: {e}"
+        results["api_inference"]["cf_doh"] = f"Error: {e}"
 
-    # 3. Test Google DoH
     try:
-        res = requests.get(
-            "https://8.8.8.8/resolve",
-            params={"name": "api-inference.huggingface.co", "type": "A"},
-            timeout=5
-        )
-        results["google_doh"] = res.json()
+        res = requests.post("https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2", json={"inputs": ["test"]}, timeout=5)
+        results["api_inference"]["http_status"] = res.status_code
     except Exception as e:
-        results["google_doh"] = f"Error: {e}"
+        results["api_inference"]["http_error"] = f"Error: {e}"
         
-    # 4. Test actual HTTP connection
+    # 2. Test router.huggingface.co (Newer gateway)
+    results["router"] = {}
     try:
-        res = requests.post(
-            "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2",
-            json={"inputs": ["test"]},
-            timeout=5
-        )
-        results["hf_http_status"] = res.status_code
-        results["hf_http_response_type"] = str(type(res.json()))
+        results["router"]["local_dns"] = socket.gethostbyname("router.huggingface.co")
     except Exception as e:
-        results["hf_http_error"] = f"Error: {e}"
+        results["router"]["local_dns"] = f"Error: {e}"
         
-    results["version"] = "v4-doh-dgn"
+    try:
+        res = requests.get("https://1.1.1.1/dns-query", params={"name": "router.huggingface.co", "type": "A"}, headers={"accept": "application/dns-json"}, timeout=5)
+        results["router"]["cf_doh"] = res.json()
+    except Exception as e:
+        results["router"]["cf_doh"] = f"Error: {e}"
+
+    try:
+        # Test feature extraction on the new router endpoint
+        res = requests.post("https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2", json={"inputs": ["test"]}, timeout=5)
+        results["router"]["http_status"] = res.status_code
+        if res.status_code == 200:
+            results["router"]["http_response_type"] = str(type(res.json()))
+    except Exception as e:
+        results["router"]["http_error"] = f"Error: {e}"
+        
+    results["version"] = "v5-router-dgn"
     return results
+
 
 
 
