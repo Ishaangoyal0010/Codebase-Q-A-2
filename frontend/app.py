@@ -52,16 +52,27 @@ OFF_TOPIC_KEYWORDS = [
 def handle_special(question):
     q = question.lower().strip()
 
-    # check specific greeting replies first
+    # 1. check thanks first
+    THANKS_KEYWORDS = ["thank you", "thanks", "thx", "ty", "tanks", "thank u", "thankyou", "tq"]
+    if any(tk in q for tk in THANKS_KEYWORDS):
+        return "You're welcome! 😊 Let me know if you need help with anything else in the codebase."
+
+    # 2. check ok / acknowledgments (exact word matches to avoid matching words like 'token' or 'docker')
+    OK_KEYWORDS = {"ok", "okay", "okk", "okey", "got it", "fine", "cool", "sure", "nice", "kk", "k"}
+    words = set(q.translate(str.maketrans("", "", ".,!?")).split())
+    if words.intersection(OK_KEYWORDS) or q in OK_KEYWORDS:
+        return "NO_REPLY"
+
+    # 3. check specific greeting replies first
     for key, reply in GREETING_REPLIES.items():
         if key in q:
             return reply
 
-    # check general greetings
+    # 4. check general greetings
     if any(q == g or q.startswith(g) for g in GREETINGS):
         return DEFAULT_GREETING
 
-    # check off-topic
+    # 5. check off-topic
     if any(k in q for k in OFF_TOPIC_KEYWORDS):
         return ("I'm specialized for codebase analysis only. I can help you with:\n\n"
                 "- Understanding what a function or class does\n"
@@ -70,6 +81,7 @@ def handle_special(question):
                 "- Identifying libraries and dependencies used\n\n"
                 "Please index a codebase and ask me something about the code!")
     return None
+
 
 # ── sidebar ───────────────────────────────────────────────────────
 with st.sidebar:
@@ -174,12 +186,15 @@ with chat_tab:
         special_reply = handle_special(question)
 
         if special_reply:
-            with st.chat_message("assistant"):
-                st.markdown(special_reply)
-            st.session_state.messages.append({
-                "role": "assistant", "content": special_reply, "sources": []
-            })
-            st.rerun()
+            if special_reply == "NO_REPLY":
+                st.rerun()
+            else:
+                with st.chat_message("assistant"):
+                    st.markdown(special_reply)
+                st.session_state.messages.append({
+                    "role": "assistant", "content": special_reply, "sources": []
+                })
+                st.rerun()
 
         elif not source:
             reply = "Please select or index a source from the sidebar first before asking code questions!"
