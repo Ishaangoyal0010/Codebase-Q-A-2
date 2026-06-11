@@ -428,7 +428,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             msgDiv.classList.add('message', role);
             
             // Parse linebreaks and inline code blocks
-            msgDiv.innerHTML = text.replace(/\n/g, '<br/>').replace(new RegExp('\\\\x60([^\\\\x60]+)\\\\x60', 'g'), '<code>$1</code>');
+            const formattedText = text
+                .split('\\n').join('<br/>')
+                .split(String.fromCharCode(96))
+                .map((part, i) => i % 2 === 1 ? '<code>' + part + '</code>' : part)
+                .join('');
+            msgDiv.innerHTML = formattedText;
 
             if (sources && sources.length > 0) {
                 const sourcesDiv = document.createElement('div');
