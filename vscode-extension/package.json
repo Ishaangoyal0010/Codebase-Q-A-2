@@ -2,7 +2,7 @@
   "name": "codebase-qa-extension",
   "displayName": "Codebase Q&A",
   "description": "Index and ask questions about your local workspace files using serverless Hugging Face & Groq APIs.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "ishaan",
   "engines": {
     "vscode": "^1.75.0"
