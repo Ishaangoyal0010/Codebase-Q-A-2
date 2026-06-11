@@ -363,7 +363,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             <span>Workspace Index</span>
             <span id="chunks-count">0 chunks</span>
         </div>
-        <button id="index-btn" class="btn-primary">Index Workspace</button>
+        <div style="display: flex; gap: 6px;">
+            <button id="index-btn" class="btn-primary" style="flex-grow: 1;">Index Workspace</button>
+            <button id="config-btn" class="btn-primary" style="width: auto; padding: 6px 8px;" title="Configure API Keys">⚙️</button>
+        </div>
         <div id="progress-log"></div>
     </div>
 
@@ -384,6 +387,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const chatInput = document.getElementById('chat-input');
         const sendBtn = document.getElementById('send-btn');
         const indexBtn = document.getElementById('index-btn');
+        const configBtn = document.getElementById('config-btn');
         const chunksCount = document.getElementById('chunks-count');
         const progressLog = document.getElementById('progress-log');
 
@@ -398,6 +402,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
 
         sendBtn.addEventListener('click', sendMessage);
+
+        configBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'configureKeys' });
+        });
 
         indexBtn.addEventListener('click', () => {
             if (isIndexing) return;
