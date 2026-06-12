@@ -87,9 +87,11 @@ export class LocalVectorStore {
         return data as number[][];
     }
 
-    async indexChunks(chunks: DocumentChunk[], progressCallback: (msg: string) => void) {
+    async indexChunks(chunks: DocumentChunk[], progressCallback: (msg: string) => void, append: boolean = false) {
         progressCallback("Beginning embedding calculations...");
-        this.embeddedChunks = [];
+        if (!append) {
+            this.embeddedChunks = [];
+        }
         
         const batchSize = 16;
         const totalChunks = chunks.length;

@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { LocalVectorStore } from './vectorStore';
-import { GroqClient } from './llm';
+import { LLMClientManager, LLMConfig } from './llm';
 import { scanWorkspace } from './indexer';
+import { indexGithubRepo } from './githubIndexer';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'codebase-qa.chatView';
@@ -10,7 +11,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private readonly _vectorStore: LocalVectorStore,
-        private readonly _groqClient: GroqClient,
+        private readonly _llmClient: LLMClientManager,
         private readonly _context: vscode.ExtensionContext
     ) {}
 
@@ -28,17 +29,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-        // Send initial state
-        this._updateIndexedCount();
-
         // Listen for messages from the Webview
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
+                case 'webviewReady':
+                    this._updateIndexedCount();
+                    this._restoreChatHistory();
+                    break;
                 case 'askQuestion':
                     await this._handleQuestion(data.question);
                     break;
                 case 'indexWorkspace':
                     await this._handleIndexing();
+                    break;
+                case 'indexGithubRepo':
+                    await this.handleGithubIndexing();
+                    break;
+                case 'clearChatHistory':
+                    this.clearChatHistory();
                     break;
                 case 'openFile':
                     await this._handleOpenFile(data.file, data.line);
@@ -56,6 +64,32 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this._view.webview.postMessage({
                 type: 'updateIndexedCount',
                 count
+            });
+        }
+    }
+
+    private _restoreChatHistory() {
+        if (this._view) {
+            const history = this._context.workspaceState.get<any[]>('chatHistory') || [];
+            this._view.webview.postMessage({
+                type: 'restoreHistory',
+                history
+            });
+        }
+    }
+
+    private _saveMessageToHistory(role: 'user' | 'assistant', text: string, sources: any[] = []) {
+        const history = this._context.workspaceState.get<any[]>('chatHistory') || [];
+        history.push({ role, text, sources });
+        this._context.workspaceState.update('chatHistory', history);
+    }
+
+    public clearChatHistory() {
+        this._context.workspaceState.update('chatHistory', []);
+        if (this._view) {
+            this._view.webview.postMessage({
+                type: 'restoreHistory',
+                history: []
             });
         }
     }
@@ -80,7 +114,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 if (this._view) {
                     this._view.webview.postMessage({ type: 'indexingProgress', message: msg });
                 }
-            });
+            }, false); // Clean index for local scans
 
             this._updateIndexedCount();
             this._view.webview.postMessage({ type: 'indexingComplete', count: chunks.length });
@@ -90,7 +124,74 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
     }
 
+    public async handleGithubIndexing() {
+        if (!this._view) { return; }
+
+        const repoPathInput = await vscode.window.showInputBox({
+            prompt: "Enter GitHub Repository (owner/repo, e.g. facebook/react):",
+            placeHolder: "owner/repo",
+            ignoreFocusOut: true
+        });
+
+        if (!repoPathInput) { return; }
+
+        const branchInput = await vscode.window.showInputBox({
+            prompt: "Enter branch name (optional, press Enter for default branch):",
+            placeHolder: "main",
+            ignoreFocusOut: true
+        });
+
+        const githubToken = await this._context.secrets.get('github_token') || "";
+
+        this._view.webview.postMessage({ type: 'indexingProgress', message: "Initializing GitHub connection..." });
+
+        try {
+            const chunks = await indexGithubRepo(
+                repoPathInput.trim(),
+                branchInput ? branchInput.trim() : "",
+                githubToken,
+                (msg) => {
+                    if (this._view) {
+                        this._view.webview.postMessage({ type: 'indexingProgress', message: msg });
+                    }
+                }
+            );
+
+            if (chunks.length === 0) {
+                throw new Error("No indexable code files found in the remote repository.");
+            }
+
+            // Append to vector store (append = true)
+            await this._vectorStore.indexChunks(chunks, (msg) => {
+                if (this._view) {
+                    this._view.webview.postMessage({ type: 'indexingProgress', message: msg });
+                }
+            }, true);
+
+            this._updateIndexedCount();
+            const totalCount = this._vectorStore.getChunkCount();
+            this._view.webview.postMessage({ type: 'indexingComplete', count: totalCount });
+            vscode.window.showInformationMessage(`Successfully indexed remote repository: ${repoPathInput}!`);
+        } catch (e: any) {
+            this._view.webview.postMessage({ type: 'indexingError', error: e.message });
+            vscode.window.showErrorMessage(`GitHub indexing failed: ${e.message}`);
+        }
+    }
+
     private async _handleOpenFile(filePath: string, line: number) {
+        if (filePath.startsWith('github:')) {
+            const parts = filePath.substring(7).split('/');
+            if (parts.length >= 4) {
+                const owner = parts[0];
+                const repo = parts[1];
+                const branch = parts[2];
+                const file = parts.slice(3).join('/');
+                const url = `https://github.com/${owner}/${repo}/blob/${branch}/${file}#L${line}`;
+                await vscode.env.openExternal(vscode.Uri.parse(url));
+            }
+            return;
+        }
+
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (!workspaceFolders) { return; }
 
@@ -127,6 +228,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     answer: specialReply,
                     sources: []
                 });
+                this._saveMessageToHistory('user', question);
+                this._saveMessageToHistory('assistant', specialReply);
             }
             return;
         }
@@ -135,25 +238,51 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         try {
             const indexedCount = this._vectorStore.getChunkCount();
             if (indexedCount === 0) {
-                throw new Error("Workspace is not indexed yet. Please click the 'Index Workspace' button first!");
+                throw new Error("Workspace is not indexed yet. Please click 'Index Local' or 'Index GitHub' first!");
             }
 
             this._view.webview.postMessage({ type: 'searching' });
+            this._saveMessageToHistory('user', question);
             
             const results = await this._vectorStore.search(question, 6);
             if (results.length === 0) {
+                const noResultMsg = "No relevant code segments could be found in the current index.";
                 this._view.webview.postMessage({
                     type: 'answerReceived',
-                    answer: "No relevant code segments could be found in the current index.",
+                    answer: noResultMsg,
                     sources: []
                 });
+                this._saveMessageToHistory('assistant', noResultMsg);
                 return;
             }
 
-            const answer = await this._groqClient.ask(question, results);
+            // Read settings configurations
+            const config = vscode.workspace.getConfiguration('codebase-qa');
+            const provider = config.get<string>('provider') || 'groq';
+            const model = config.get<string>('model') || 'llama-3.1-8b-instant';
+            const systemPrompt = config.get<string>('systemPrompt') || '';
+            const ollamaUrl = config.get<string>('ollamaUrl') || 'http://localhost:11434';
+
+            // Read API Keys from secrets storage
+            const keys: Record<string, string> = {};
+            keys['groq_api_key'] = await this._context.secrets.get('groq_api_key') || "";
+            keys['openai_api_key'] = await this._context.secrets.get('openai_api_key') || "";
+            keys['anthropic_api_key'] = await this._context.secrets.get('anthropic_api_key') || "";
+            keys['gemini_api_key'] = await this._context.secrets.get('gemini_api_key') || "";
+
+            this._llmClient.setKeys(keys);
+
+            const llmConfig: LLMConfig = {
+                provider,
+                model,
+                systemPrompt,
+                ollamaUrl
+            };
+
+            const answer = await this._llmClient.ask(question, results, llmConfig);
             
             const sources = results.map(r => ({
-                reference: `${r.chunk.filePath}:${r.chunk.startLine}-${r.chunk.endLine}`,
+                reference: `${r.chunk.filePath.replace(/^github:/, '')}:${r.chunk.startLine}-${r.chunk.endLine}`,
                 file: r.chunk.filePath,
                 line: r.chunk.startLine,
                 similarity: Math.round(r.similarity * 10000) / 10000
@@ -164,6 +293,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 answer,
                 sources
             });
+
+            this._saveMessageToHistory('assistant', answer, sources);
         } catch (e: any) {
             this._view.webview.postMessage({
                 type: 'answerError',
@@ -363,8 +494,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             <span>Workspace Index</span>
             <span id="chunks-count">0 chunks</span>
         </div>
+        <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+            <button id="index-btn" class="btn-primary" style="flex-grow: 1;">Index Local</button>
+            <button id="github-btn" class="btn-primary" style="flex-grow: 1;">Index GitHub</button>
+        </div>
         <div style="display: flex; gap: 6px;">
-            <button id="index-btn" class="btn-primary" style="flex-grow: 1;">Index Workspace</button>
+            <button id="clear-chat-btn" class="btn-primary" style="flex-grow: 1;">Clear Chat</button>
             <button id="config-btn" class="btn-primary" style="width: auto; padding: 6px 8px;" title="Configure API Keys">⚙️</button>
         </div>
         <div id="progress-log"></div>
@@ -387,12 +522,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const chatInput = document.getElementById('chat-input');
         const sendBtn = document.getElementById('send-btn');
         const indexBtn = document.getElementById('index-btn');
+        const githubBtn = document.getElementById('github-btn');
+        const clearChatBtn = document.getElementById('clear-chat-btn');
         const configBtn = document.getElementById('config-btn');
         const chunksCount = document.getElementById('chunks-count');
         const progressLog = document.getElementById('progress-log');
 
         let isIndexing = false;
         let isSearching = false;
+
+        // Notify extension that DOM is ready
+        vscode.postMessage({ type: 'webviewReady' });
 
         // Handle enter key
         chatInput.addEventListener('keydown', (e) => {
@@ -407,13 +547,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             vscode.postMessage({ type: 'configureKeys' });
         });
 
+        clearChatBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'clearChatHistory' });
+        });
+
         indexBtn.addEventListener('click', () => {
             if (isIndexing) return;
             isIndexing = true;
             indexBtn.disabled = true;
+            githubBtn.disabled = true;
             indexBtn.innerHTML = '<span class="spinner"></span>Indexing...';
             progressLog.innerText = "Initializing scan...";
             vscode.postMessage({ type: 'indexWorkspace' });
+        });
+
+        githubBtn.addEventListener('click', () => {
+            if (isIndexing) return;
+            isIndexing = true;
+            indexBtn.disabled = true;
+            githubBtn.disabled = true;
+            githubBtn.innerHTML = '<span class="spinner"></span>Connecting...';
+            progressLog.innerText = "Prompting repository info...";
+            vscode.postMessage({ type: 'indexGithubRepo' });
         });
 
         function sendMessage() {
@@ -431,7 +586,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             });
         }
 
-        function appendMessage(text, role, sources = []) {
+        function appendMessage(text, role, sources = [], skipScroll = false) {
             const msgDiv = document.createElement('div');
             msgDiv.classList.add('message', role);
             
@@ -465,13 +620,26 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
 
             chatContainer.appendChild(msgDiv);
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            if (!skipScroll) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
         }
 
         // Listen for messages from extension host
         window.addEventListener('message', event => {
             const message = event.data;
             switch (message.type) {
+                case 'restoreHistory':
+                    chatContainer.innerHTML = '';
+                    if (message.history && message.history.length > 0) {
+                        message.history.forEach(msg => {
+                            appendMessage(msg.text, msg.role, msg.sources, true);
+                        });
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    } else {
+                        appendMessage('Hi! 👋 Index your workspace first, then ask me anything about the code.', 'assistant', [], true);
+                    }
+                    break;
                 case 'updateIndexedCount':
                     chunksCount.innerText = message.count + ' chunks';
                     break;
@@ -481,14 +649,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 case 'indexingComplete':
                     isIndexing = false;
                     indexBtn.disabled = false;
-                    indexBtn.innerText = 'Index Workspace';
+                    githubBtn.disabled = false;
+                    indexBtn.innerText = 'Index Local';
+                    githubBtn.innerText = 'Index GitHub';
                     progressLog.innerText = 'Indexing complete!';
                     chunksCount.innerText = message.count + ' chunks';
                     break;
                 case 'indexingError':
                     isIndexing = false;
                     indexBtn.disabled = false;
-                    indexBtn.innerText = 'Index Workspace';
+                    githubBtn.disabled = false;
+                    indexBtn.innerText = 'Index Local';
+                    githubBtn.innerText = 'Index GitHub';
                     progressLog.innerText = 'Error: ' + message.error;
                     break;
                 case 'searching':

@@ -2,7 +2,7 @@
   "name": "codebase-qa-extension",
   "displayName": "Codebase Q&A",
   "description": "Index and ask questions about your local workspace files using serverless Hugging Face & Groq APIs.",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "publisher": "ishaangoyal",
   "icon": "media/icon.png",
   "repository": {
@@ -43,8 +43,50 @@
       {
         "command": "codebase-qa.clearIndex",
         "title": "Codebase Q&A: Clear Workspace Index"
+      },
+      {
+        "command": "codebase-qa.indexGithubRepo",
+        "title": "Codebase Q&A: Index GitHub Repository"
+      },
+      {
+        "command": "codebase-qa.clearChat",
+        "title": "Codebase Q&A: Clear Chat History"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Codebase Q&A",
+      "properties": {
+        "codebase-qa.provider": {
+          "type": "string",
+          "default": "groq",
+          "enum": ["groq", "openai", "anthropic", "gemini", "ollama"],
+          "enumDescriptions": [
+            "Groq (Cloud)",
+            "OpenAI (Cloud)",
+            "Anthropic (Cloud)",
+            "Google Gemini (Cloud)",
+            "Ollama (Local)"
+          ],
+          "description": "Select the AI LLM provider to use for chat."
+        },
+        "codebase-qa.model": {
+          "type": "string",
+          "default": "llama-3.1-8b-instant",
+          "description": "Specify the model to use for completion (e.g. gpt-4o-mini, gemini-1.5-flash, etc.)."
+        },
+        "codebase-qa.systemPrompt": {
+          "type": "string",
+          "default": "You are a codebase assistant. Answer questions using the provided file chunks (which can include code, configuration, or documentation files like README.md).\nAlways mention the exact file and line number like `auth/middleware.py:42` or `README.md:12`.\nCite sources using [1], [2] etc.\nIf the answer cannot be found or inferred from the provided chunks, say so.",
+          "editPresentation": "multilineText",
+          "description": "The default system instructions sent to the AI model."
+        },
+        "codebase-qa.ollamaUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "The URL of your local Ollama server."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
