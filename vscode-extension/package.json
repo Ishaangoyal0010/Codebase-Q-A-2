@@ -2,8 +2,9 @@
   "name": "codebase-qa-extension",
   "displayName": "Codebase Q&A",
   "description": "Index and ask questions about your local workspace files using serverless Hugging Face & Groq APIs.",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "publisher": "ishaangoyal",
+  "icon": "media/icon.png",
   "repository": {
     "type": "git",
     "url": "https://github.com/Ishaangoyal0010/Codebase-Q-A-2"
